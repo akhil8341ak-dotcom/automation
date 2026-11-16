@@ -1,0 +1,30 @@
+{
+  "name": "creatorflow-ai-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production-Grade AI YouTube Automation Platform - n8n-Style Visual Engine",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "dev": "node scripts/dev.js",
+    "dev:server": "npm run dev --workspace=@creatorflow/server",
+    "dev:client": "npm run dev --workspace=@creatorflow/client",
+    "test": "npm run test --workspaces --if-present",
+    "start": "npm run start --workspace=@creatorflow/server"
+  },
+  "keywords": [
+    "youtube-automation",
+    "workflow-engine",
+    "n8n-alternative",
+    "ai-video",
+    "ffmpeg",
+    "content-creation"
+  ],
+  "author": "CreatorFlow AI",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^26.6.5"
+  }
+}

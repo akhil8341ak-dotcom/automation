@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  creatorflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: creatorflow-ai
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - HOST=0.0.0.0
+      - NODE_ENV=production
+      - SQLITE_DB_PATH=/app/data/creatorflow.db
+      - STORAGE_PATH=/app/data/storage
+      - DEFAULT_AI_PROVIDER=gemini
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - YOUTUBE_CLIENT_ID=${YOUTUBE_CLIENT_ID}
+      - YOUTUBE_CLIENT_SECRET=${YOUTUBE_CLIENT_SECRET}
+    volumes:
+      - ./data:/app/data
