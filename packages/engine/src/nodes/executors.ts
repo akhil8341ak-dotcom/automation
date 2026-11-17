@@ -2,12 +2,13 @@ import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import { NodeExecutor } from './base.js';
 import { ExecutionContext, NodeOutputResult } from '../execution/context.js';
-import { 
-  TopicCandidate, 
-  ScriptDocument, 
-  Storyboard, 
-  RenderJobConfig, 
-  YouTubePublishPayload 
+import {
+  TopicCandidate,
+  TopicCandidateSchema,
+  ScriptDocument,
+  Storyboard,
+  RenderJobConfig,
+  YouTubePublishPayload
 } from '@creatorflow/shared';
 
 // ==========================================
@@ -199,52 +200,100 @@ export class AiTextGenExecutor extends NodeExecutor {
   }
 }
 
+
 export class YtTopicResearchExecutor extends NodeExecutor {
   async execute(ctx: ExecutionContext): Promise<NodeOutputResult> {
     const niche = ctx.inputData?.niche || ctx.node.config.niche || 'Software Engineering & AI';
     const format = ctx.node.config.format || 'shorts';
     const numCandidates = ctx.node.config.numberOfCandidates || 3;
 
+    if (format !== 'shorts' && format !== 'longform') {
+      throw new Error(`Invalid video format: ${format}`);
+    }
+
     ctx.info(`Scouting high-intent topic candidates for niche: "${niche}"...`);
-    const prompt = `Act as an expert YouTube growth strategist. Research and generate ${numCandidates} viral, original topic candidates for ${format} videos in the "${niche}" niche.
+
+    const prompt = `Act as an expert YouTube growth strategist. Generate ${numCandidates} original topic candidates for ${format} videos in the "${niche}" niche.
+
 Return a JSON object with a "topics" array. Each item must have:
+- id: unique string
 - title: punchy, curious title
 - premise: core explanation
 - targetAudience: specific viewer group
-- noveltyScore: 1-100
-- audienceInterestScore: 1-100
-- productionFeasibility: 1-100
+- noveltyScore: integer from 1-100
+- audienceInterestScore: integer from 1-100
+- productionFeasibility: integer from 1-100
 - viralAngle: unique psychological hook
-- factualRiskScore: 1-100 (lower is safer)
+- factualRiskScore: integer from 1-100 (lower is safer)
 - searchIntentKeywords: array of 3 search phrases
+- format: "${format}"
 - estimatedDurationSec: ${format === 'shorts' ? '45-55' : '480-600'}
-- sourcesFound: array of {title, url}`;
+- sourcesFound: array of objects with title and optional url/note
+- status: "draft"`;
 
     const res = await ctx.services.ai.generate({ prompt, jsonOutput: true });
-    const topics: TopicCandidate[] = res.json?.topics || [];
-    ctx.info(`Discovered ${topics.length} candidate topics.`);
 
-    // Choose top ranked topic
-    const topTopic = topics[0] || {
-      id: `top-${Date.now()}`,
-      title: 'How Local AI Models Replaced Cloud APIs',
-      premise: 'How offline quantized models achieved parity with cloud LLMs.',
-      targetAudience: 'Software Engineers',
-      noveltyScore: 89,
-      audienceInterestScore: 92,
-      productionFeasibility: 95,
-      viralAngle: 'Zero-cost local developer workflows',
-      factualRiskScore: 12,
-      searchIntentKeywords: ['local llm 2026', 'ollama tutorial'],
-      format,
-      estimatedDurationSec: format === 'shorts' ? 50 : 480,
-      sourcesFound: [{ title: 'Developer Survey 2026' }],
+    const rawTopics = res.json?.topics;
+
+    if (!Array.isArray(rawTopics) || rawTopics.length === 0) {
+      throw new Error('Topic research failed: AI did not return any topic candidates.');
+    }
+
+    const validTopics: TopicCandidate[] = [];
+
+    for (const rawTopic of rawTopics) {
+      const result = TopicCandidateSchema.safeParse(rawTopic);
+
+      if (result.success) {
+        validTopics.push(result.data);
+      } else {
+        ctx.warn(`Skipping invalid topic candidate: ${result.error.message}`);
+      }
+    }
+
+    if (validTopics.length === 0) {
+      throw new Error('Topic research failed: AI returned no valid topic candidates.');
+    }
+
+    const rankedTopics = validTopics
+      .sort((a, b) => {
+        const scoreA =
+          a.noveltyScore +
+          a.audienceInterestScore +
+          a.productionFeasibility +
+          (100 - a.factualRiskScore);
+
+        const scoreB =
+          b.noveltyScore +
+          b.audienceInterestScore +
+          b.productionFeasibility +
+          (100 - b.factualRiskScore);
+
+        return scoreB - scoreA;
+      })
+      .slice(0, numCandidates);
+
+    const topTopic: TopicCandidate = {
+      ...rankedTopics[0],
       status: 'selected',
     };
 
-    return { data: { topic: topTopic, allCandidates: topics } };
+    const allCandidates = rankedTopics.map((topic, index) => ({
+      ...topic,
+      status: index === 0 ? 'selected' as const : 'draft' as const,
+    }));
+
+    ctx.info(`Validated ${validTopics.length} topics. Selected: "${topTopic.title}".`);
+
+    return {
+      data: {
+        topic: topTopic,
+        allCandidates,
+      },
+    };
   }
 }
+
 
 export class YtScriptWriterExecutor extends NodeExecutor {
   async execute(ctx: ExecutionContext): Promise<NodeOutputResult> {
@@ -411,13 +460,13 @@ export class YtStoryboardGenExecutor extends NodeExecutor {
       estimatedDurationSec: section.estimatedSec,
       visualObjective: section.visualDirection,
       assetSearchQuery: section.visualDirection.slice(0, 40),
-      onScreenText: section.sectionTitle === 'The Hook' 
-        ? 'CLOUD BILLS: $0' 
-        : section.sectionTitle === 'The Shift' 
-        ? '80+ TOKENS/SEC' 
-        : section.sectionTitle === 'The Workflow'
-        ? 'AUTONOMOUS WORKFLOWS'
-        : 'SUBSCRIBE FOR BLUEPRINTS',
+      onScreenText: section.sectionTitle === 'The Hook'
+        ? 'CLOUD BILLS: $0'
+        : section.sectionTitle === 'The Shift'
+          ? '80+ TOKENS/SEC'
+          : section.sectionTitle === 'The Workflow'
+            ? 'AUTONOMOUS WORKFLOWS'
+            : 'SUBSCRIBE FOR BLUEPRINTS',
       transition: (idx % 2 === 0 ? 'zoom' : 'fade') as any,
       confidenceScore: 92,
     }));
@@ -445,8 +494,8 @@ export class YtStoryboardGenExecutor extends NodeExecutor {
 export class VoiceoverTtsExecutor extends NodeExecutor {
   async execute(ctx: ExecutionContext): Promise<NodeOutputResult> {
     const script: ScriptDocument = ctx.inputData?.script;
-    const fullText = script 
-      ? script.sections.map(s => s.narrationText).join(' ') 
+    const fullText = script
+      ? script.sections.map(s => s.narrationText).join(' ')
       : ctx.inputData?.text || 'Welcome to CreatorFlow AI.';
 
     const voice = ctx.node.config.voice || 'en-US-ChristopherNeural';

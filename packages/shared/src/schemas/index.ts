@@ -142,3 +142,30 @@ export const YouTubePublishPayloadSchema = z.object({
   notifySubscribers: z.boolean().default(true),
   scheduledPublishTime: z.string().datetime().optional(),
 });
+
+
+
+export const TopicCandidateSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  premise: z.string().min(1),
+  targetAudience: z.string().min(1),
+  noveltyScore: z.number().int().min(1).max(100),
+  audienceInterestScore: z.number().int().min(1).max(100),
+  productionFeasibility: z.number().int().min(1).max(100),
+  viralAngle: z.string().min(1),
+  factualRiskScore: z.number().int().min(1).max(100),
+  searchIntentKeywords: z.array(z.string()),
+  format: z.enum(['shorts', 'longform']),
+  estimatedDurationSec: z.number().positive(),
+  sourcesFound: z.array(
+    z.object({
+      title: z.string(),
+      url: z.string().optional(),
+      note: z.string().optional(),
+    })
+  ),
+  status: z.enum(['draft', 'selected', 'archived']),
+});
+
+
