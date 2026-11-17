@@ -22,6 +22,7 @@ export class AiProviderService {
   private openaiKey?: string;
   private anthropicKey?: string;
   private ollamaHost?: string;
+  private ollamaModel: string;
   private defaultProvider: string;
 
   constructor(env: Record<string, string | undefined> = process.env) {
@@ -29,18 +30,19 @@ export class AiProviderService {
     this.openaiKey = env.OPENAI_API_KEY;
     this.anthropicKey = env.ANTHROPIC_API_KEY;
     this.ollamaHost = env.OLLAMA_HOST || 'http://localhost:11434';
+    this.ollamaModel = env.OLLAMA_MODEL || 'llama3:8b';
     this.defaultProvider = env.DEFAULT_AI_PROVIDER || 'gemini';
   }
+
 
   public getActiveProvider(requested?: string): string {
     if (requested && requested !== 'auto') {
       return requested;
     }
-    if (this.geminiKey && this.geminiKey !== 'your_gemini_api_key_here') return 'gemini';
-    if (this.openaiKey && this.openaiKey !== 'your_openai_api_key_here') return 'openai';
-    if (this.anthropicKey && this.anthropicKey !== 'your_anthropic_api_key_here') return 'anthropic';
-    return 'mock'; // Default to reliable high-quality offline generator
+
+    return this.defaultProvider;
   }
+
 
   public async generate(options: GenerateTextOptions): Promise<GenerateTextResult> {
     const provider = this.getActiveProvider(options.provider);
@@ -73,7 +75,7 @@ export class AiProviderService {
     const model = options.model || 'gemini-1.5-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-    const promptText = options.systemPrompt 
+    const promptText = options.systemPrompt
       ? `${options.systemPrompt}\n\nTask:\n${options.prompt}`
       : options.prompt;
 
@@ -236,7 +238,7 @@ export class AiProviderService {
 
   private async callOllama(options: GenerateTextOptions): Promise<GenerateTextResult> {
     const host = this.ollamaHost;
-    const model = options.model || 'llama3:8b';
+    const model = options.model || this.ollamaModel;
 
     const response = await fetch(`${host}/api/generate`, {
       method: 'POST',
